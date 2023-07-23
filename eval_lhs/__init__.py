@@ -17,21 +17,18 @@ class Rewriter(ast.NodeTransformer):
         self._replace_end_col_offset = 0
         self._replacement = None
         self._replacable_assert = None
-        self._visit_path = []
 
     def generic_visit(self, node):
-        self._visit_path.append(node)
         super().generic_visit(node)
         if isinstance(node, ast.Assert):
             if not hasattr(node.test, "left"):
                 return node
-            module_node = ast.Expression([], type_ignores=[])
-            ast.copy_location(module_node, node)
             expr_node = ast.Expr(node.test.left)
             self._replacable_assert = ast.unparse(node)
             self._replacement = ast.unparse(expr_node)
             return expr_node
         return node
+
 
 class Replacer(ast.NodeTransformer):
     def __init__(self, replacement):
@@ -44,15 +41,23 @@ class Replacer(ast.NodeTransformer):
         for i, comparator in enumerate(node.test.comparators):
             if not isinstance(comparator, ast.Name):
                 continue
+            # If the comparator id matches the module, we've found the target
+            # to replace
             if comparator.id == __name__:
                 node.test.comparators[i] = ast.Constant(value=self._replacement)
                 self._replacement_made = ast.unparse(node)
         return node
 
-class Snapshot:
-    def __init__(self):
-        self._expected_value = 0
 
+class _EvalLHS:
+    """
+    When placed on the right-hand side of an "==" comparison, an instance of
+    this class will evaluate the left-hand side, replace itself with the
+    value that comes from that evaluation, and print it to stdout.
+
+    It is preferred that you use the module name in place of this class for
+    convenience.
+    """
     def __eq__(self, other):
         caller_frame = getframeinfo(currentframe().f_back)
         calling_filename = caller_frame.filename
@@ -83,7 +88,5 @@ class Snapshot:
             print("\n".join(lines))
         return True
 
-    def __call__(self):
-        return self
 
-sys.modules[__name__] = Snapshot()
+sys.modules[__name__] = _EvalLHS()

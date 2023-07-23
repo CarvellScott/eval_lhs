@@ -15,7 +15,7 @@ class Rewriter(ast.NodeTransformer):
         self._replace_end_lineno = 0
         self._replace_col_offset = 0
         self._replace_end_col_offset = 0
-        self._replacement = None
+        self.raw_lhs = None
         self._replacable_assert = None
 
     def generic_visit(self, node):
@@ -23,10 +23,16 @@ class Rewriter(ast.NodeTransformer):
         if isinstance(node, ast.Assert):
             if not hasattr(node.test, "left"):
                 return node
-            expr_node = ast.Expr(node.test.left)
-            self._replacable_assert = ast.unparse(node)
-            self._replacement = ast.unparse(expr_node)
-            return expr_node
+            if not hasattr(node.test, "comparators"):
+                return node
+            for i, comparator in enumerate(node.test.comparators):
+                if not isinstance(comparator, ast.Name):
+                    continue
+                if comparator.id == __name__:
+                    expr_node = ast.Expr(node.test.left)
+                    self._replacable_assert = ast.unparse(node)
+                    self.raw_lhs = ast.unparse(expr_node)
+            return node
         return node
 
 
@@ -49,6 +55,11 @@ class Replacer(ast.NodeTransformer):
         return node
 
 
+def _run_replacement(replacement, prev_globals, prev_locals):
+    code_obj = code.compile_command(replacement, symbol="eval")
+    return eval(code_obj, prev_globals, prev_locals)
+
+
 class _EvalLHS:
     """
     When placed on the right-hand side of an "==" comparison, an instance of
@@ -62,6 +73,8 @@ class _EvalLHS:
         caller_frame = getframeinfo(currentframe().f_back)
         calling_filename = caller_frame.filename
         calling_line = caller_frame.lineno # calling line is 1 based
+        prev_globals = currentframe().f_back.f_globals
+        prev_locals = currentframe().f_back.f_locals
         rewriter = Rewriter()
         with open(calling_filename) as f:
             source = f.read()
@@ -71,11 +84,8 @@ class _EvalLHS:
             new_tree = ast.fix_missing_locations(rewriter.visit(tree))
 
             # Evaluate the left-hand-side of the "==" for this instance
-            prev_globals = currentframe().f_back.f_globals
-            prev_locals = currentframe().f_back.f_locals
-            code_obj = code.compile_command(rewriter._replacement,
-                                            symbol="eval")
-            replacement = eval(code_obj, prev_globals, prev_locals)
+            replacement = _run_replacement(rewriter.raw_lhs, prev_globals,
+                                           prev_locals)
 
             # The old tree is FUBAR but we now know what we want to replace
             # this instance with.

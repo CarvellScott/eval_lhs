@@ -42,17 +42,11 @@ class Replacer(ast.NodeTransformer):
         if not hasattr(node.test, "comparators"):
             return node
         for i, comparator in enumerate(node.test.comparators):
-            if not isinstance(comparator, ast.Call):
+            if not isinstance(comparator, ast.Name):
                 continue
-            node.test.comparators[i] = ast.Constant(value=self._replacement)
-            self._replacement_made = ast.unparse(node)
-            if not isinstance(comparator.func, ast.Name):
-                continue
-            #node.test.comparators[i] = ast.Constant(69)
-            if comparator.func.id == "Snapshot":
+            if comparator.id == __name__:
                 node.test.comparators[i] = ast.Constant(value=self._replacement)
-                #sys.stdout.write(ast.unparse(node.comparators[i]))
-                return node
+                self._replacement_made = ast.unparse(node)
         return node
 
 class Snapshot:
@@ -82,6 +76,7 @@ class Snapshot:
             # this instance with.
             lines = source.splitlines()
             tree = ast.parse(source)
+            #print(ast.dump(tree, indent=4))
             replacer = Replacer(replacement)
             final_tree = ast.fix_missing_locations(replacer.visit(tree))
             lines[calling_line - 1] = replacer._replacement_made

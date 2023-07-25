@@ -9,7 +9,7 @@ import sys
 import code
 
 
-class Rewriter(ast.NodeTransformer):
+class Searcher(ast.NodeTransformer):
     """
     This class searches an AST for assertions to replace.
     It does NOT make modifications to the tree.
@@ -72,17 +72,17 @@ class _EvalLHS:
         calling_line = caller_frame.lineno # calling line is 1 based
         prev_globals = currentframe().f_back.f_globals
         prev_locals = currentframe().f_back.f_locals
-        rewriter = Rewriter()
+        searcher = Searcher()
         with open(calling_filename) as f:
             source = f.read()
             # Parse the syntax tree of the source.
             tree = ast.parse(source)
-            # Populate rewriter with the location of this instance of Snapshot.
-            post_visit_tree = rewriter.visit(tree)
+            # Populate searcher with the location of this instance of Snapshot.
+            post_visit_tree = searcher.visit(tree)
             assert tree is post_visit_tree
 
             # Evaluate the left-hand-side of the "==" for this instance
-            replacement = _run_replacement(rewriter.raw_lhs, prev_globals,
+            replacement = _run_replacement(searcher.raw_lhs, prev_globals,
                                            prev_locals)
 
             # The old tree is FUBAR but we now know what we want to replace

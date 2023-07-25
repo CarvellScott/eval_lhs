@@ -98,6 +98,14 @@ class _EvalLHS:
             replacement = _run_replacement(searcher.raw_lhs, prev_globals,
                                            prev_locals)
 
+            # Fun trick for your .vimrc:
+            # iabbrev eval_lhs eval_lhs<Esc>:w<CR>7Xx:.r !./%<CR>kJ$
+            # Then unfalsify this conditional. I should make this a feature
+            # somehow.
+            if False:
+                print(repr(replacement))
+                return True
+
             # The old tree is FUBAR but we now know what we want to replace
             # this instance with.
             lines = source.splitlines()

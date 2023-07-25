@@ -10,13 +10,12 @@ import code
 
 
 class Rewriter(ast.NodeTransformer):
+    """
+    This class searches an AST for assertions to replace.
+    It does NOT make modifications to the tree.
+    """
     def __init__(self):
-        self._replace_lineno = 0
-        self._replace_end_lineno = 0
-        self._replace_col_offset = 0
-        self._replace_end_col_offset = 0
         self.raw_lhs = None
-        self._replacable_assert = None
 
     def generic_visit(self, node):
         super().generic_visit(node)
@@ -29,9 +28,7 @@ class Rewriter(ast.NodeTransformer):
                 if not isinstance(comparator, ast.Name):
                     continue
                 if comparator.id == __name__:
-                    expr_node = ast.Expr(node.test.left)
-                    self._replacable_assert = ast.unparse(node)
-                    self.raw_lhs = ast.unparse(expr_node)
+                    self.raw_lhs = ast.unparse(ast.Expr(node.test.left))
             return node
         return node
 
@@ -81,7 +78,8 @@ class _EvalLHS:
             # Parse the syntax tree of the source.
             tree = ast.parse(source)
             # Populate rewriter with the location of this instance of Snapshot.
-            new_tree = ast.fix_missing_locations(rewriter.visit(tree))
+            post_visit_tree = rewriter.visit(tree)
+            assert tree is post_visit_tree
 
             # Evaluate the left-hand-side of the "==" for this instance
             replacement = _run_replacement(rewriter.raw_lhs, prev_globals,

@@ -14,11 +14,15 @@ class Searcher(ast.NodeTransformer):
     This class searches an AST for assertions to replace.
     It does NOT make modifications to the tree.
     """
-    def __init__(self):
+    def __init__(self, calling_lineno):
+        """
+        @param calling_lineno (int): The calling line to search.
+        """
+
+        self.calling_lineno = calling_lineno
         self.raw_lhs = None
 
-    def generic_visit(self, node):
-        super().generic_visit(node)
+    def visit_Assert(self, node):
         if isinstance(node, ast.Assert):
             if not hasattr(node.test, "left"):
                 return node
@@ -27,6 +31,8 @@ class Searcher(ast.NodeTransformer):
             for i, comparator in enumerate(node.test.comparators):
                 if not isinstance(comparator, ast.Name):
                     continue
+                if comparator.lineno != self.calling_lineno:
+                    continue
                 if comparator.id == __name__:
                     self.raw_lhs = ast.unparse(ast.Expr(node.test.left))
             return node
@@ -34,11 +40,18 @@ class Searcher(ast.NodeTransformer):
 
 
 class Replacer(ast.NodeTransformer):
-    def __init__(self, replacement):
+    """
+    This class will replace the right-hand-side of an assertion with a
+    previously-calculated value
+    """
+    def __init__(self, replacement, calling_lineno):
         self._replacement = replacement
         self._replacement_made = None
+        self._calling_lineno = calling_lineno
 
     def visit_Assert(self, node):
+        if not hasattr(node.test, "left"):
+            return node
         if not hasattr(node.test, "comparators"):
             return node
         for i, comparator in enumerate(node.test.comparators):
@@ -69,10 +82,10 @@ class _EvalLHS:
     def __eq__(self, other):
         caller_frame = getframeinfo(currentframe().f_back)
         calling_filename = caller_frame.filename
-        calling_line = caller_frame.lineno # calling line is 1 based
+        calling_lineno = caller_frame.lineno # calling line is 1 based
         prev_globals = currentframe().f_back.f_globals
         prev_locals = currentframe().f_back.f_locals
-        searcher = Searcher()
+        searcher = Searcher(calling_lineno)
         with open(calling_filename) as f:
             source = f.read()
             # Parse the syntax tree of the source.
@@ -90,9 +103,9 @@ class _EvalLHS:
             lines = source.splitlines()
             tree = ast.parse(source)
             #print(ast.dump(tree, indent=4))
-            replacer = Replacer(replacement)
+            replacer = Replacer(replacement, calling_lineno)
             final_tree = ast.fix_missing_locations(replacer.visit(tree))
-            lines[calling_line - 1] = replacer._replacement_made
+            lines[calling_lineno - 1] = replacer._replacement_made
             print("\n".join(lines))
         return True
 
